@@ -555,7 +555,18 @@ def process_like_request(uid, region, require_key=True, api_key=None):
     except Exception as e:
         return jsonify({"error": str(e), "status": 0}), 500
 
-# ==================== ONLY LIKE ENDPOINT ====================
+# ==================== API ENDPOINT ====================
+
+@app.route("/")
+def home():
+    return jsonify({
+        "status": "online",
+        "service": "Sarker Free Fire Free Like API",
+        "port": "1001",
+        "developer": "M. Sarker",
+        "powered_by": "M. Sarker",
+        "message": "API active!"
+    })
 
 @app.route('/like', methods=['GET'])
 def handle_requests():
