@@ -400,7 +400,7 @@ def get_player_info(encrypted_uid, region, token):
     headers = {
         'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
         'Authorization': f"Bearer {token}",
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': "application/x-www-form-urlencoded",
         'X-GA': "v1 1",
         'ReleaseVersion': "OB55"
     }
