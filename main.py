@@ -25,12 +25,12 @@ app = Flask(__name__)
 API_KEY = "mm"
 
 # ==================== INFO API ====================
-INFO_API_URL = "http://78.154.103.39:11168/info?uid={uid}"
+INFO_API_URL = "https://ff-info-api-xi.vercel.app/info?uid={uid}"
 
 # ==================== 2 JWT TOKEN APIS ====================
 JWT_API_URLS = [
-    "http://78.154.103.23:12698/token",
-    "http://78.154.103.23:12698/token",
+    "https://ff-jwt-api-1.vercel.app/token",
+    "https://ff-jwt-api-2.vercel.app/token",
 ]
 
 TOKEN_CACHE = {}
@@ -172,17 +172,14 @@ async def generate_jwt_token_with_api(uid, password, api_url, retry_count=0):
                             if uid in FAILED_TOKENS:
                                 del FAILED_TOKENS[uid]
                             
-                            print(f"✅ Token generated for {uid} from {api_url}")
                             return token
-                        else:
-                            print(f"⚠️ No token in response for {uid} from {api_url}")
                     else:
-                        print(f"❌ API {api_url} returned {response.status} for {uid}")
+                        pass
                             
         except asyncio.TimeoutError:
-            print(f"⏰ Timeout for {uid} from {api_url}")
-        except Exception as e:
-            print(f"❌ Error for {uid} from {api_url}: {e}")
+            pass
+        except Exception:
+            pass
         
         if attempt < max_attempts - 1:
             await asyncio.sleep(2)
@@ -191,7 +188,6 @@ async def generate_jwt_token_with_api(uid, password, api_url, retry_count=0):
         'timestamp': time.time(),
         'api_used': api_url
     }
-    print(f"❌ Failed to generate token for {uid}")
     return None
 
 async def generate_tokens_batch_parallel(accounts, api_urls):
@@ -204,13 +200,9 @@ async def generate_tokens_batch_parallel(accounts, api_urls):
     api1_accounts = accounts[:split_size]
     api2_accounts = accounts[split_size:]
     
-    print(f"📊 API1: {len(api1_accounts)} accounts, API2: {len(api2_accounts)} accounts")
-    print(f"🚀 API1 এবং API2 একসাথে তাদের ভাগের সব account এর token generate করছে...")
-    
     async def generate_for_api1():
         if not api1_accounts:
             return {}
-        print(f"🔥 API1 শুরু করলো {len(api1_accounts)} টা account এর token generation (সব একসাথে)...")
         tokens = {}
         semaphore = asyncio.Semaphore(100)
         
@@ -226,13 +218,11 @@ async def generate_tokens_batch_parallel(accounts, api_urls):
         
         tasks = [limited_generate(acc) for acc in api1_accounts]
         await asyncio.gather(*tasks, return_exceptions=True)
-        print(f"✅ API1 শেষ করলো {len(tokens)} টা token")
         return tokens
     
     async def generate_for_api2():
         if not api2_accounts:
             return {}
-        print(f"🔥 API2 শুরু করলো {len(api2_accounts)} টা account এর token generation (সব একসাথে)...")
         tokens = {}
         semaphore = asyncio.Semaphore(100)
         
@@ -248,23 +238,19 @@ async def generate_tokens_batch_parallel(accounts, api_urls):
         
         tasks = [limited_generate(acc) for acc in api2_accounts]
         await asyncio.gather(*tasks, return_exceptions=True)
-        print(f"✅ API2 শেষ করলো {len(tokens)} টা token")
         return tokens
 
-    start_time = time.time()
     results = await asyncio.gather(
         generate_for_api1(),
         generate_for_api2(),
         return_exceptions=True
     )
-    end_time = time.time()
     
     all_tokens = {}
     for result in results:
         if isinstance(result, dict):
             all_tokens.update(result)
-    
-    print(f"✅ মোট {len(all_tokens)} টা token generate হলো (টাইম: {round(end_time - start_time, 2)} সেকেন্ড)")
+            
     return all_tokens
 
 async def send_like(encrypted_uid, token, url):
@@ -323,8 +309,6 @@ async def send_all_likes(target_uid, url, accounts, encrypted_uid):
         already_liked = liked_cache.get(target_uid, set())
         fresh_accounts = [acc for acc in accounts if acc['uid'] not in already_liked]
     
-    print(f"Total: {len(accounts)}, Fresh: {len(fresh_accounts)}, Already liked: {len(already_liked)}")
-    
     if not fresh_accounts:
         return {
             'success': 0, 
@@ -350,16 +334,9 @@ async def send_all_likes(target_uid, url, accounts, encrypted_uid):
         else:
             accounts_needing_tokens.append(acc)
     
-    print(f"📊 Valid tokens in cache: {len(accounts_with_valid_tokens)}")
-    print(f"📊 Need new tokens: {len(accounts_needing_tokens)}")
-    
     tokens_dict = {}
-    token_gen_time = 0
     if accounts_needing_tokens:
-        print(f"🔄 {len(accounts_needing_tokens)} টা account এর জন্য token generation শুরু...")
-        start = time.time()
         tokens_dict = await generate_tokens_batch_parallel(accounts_needing_tokens, JWT_API_URLS)
-        token_gen_time = time.time() - start
         save_data()
     
     all_accounts_with_tokens = list(accounts_with_valid_tokens)
@@ -367,15 +344,10 @@ async def send_all_likes(target_uid, url, accounts, encrypted_uid):
         if acc['uid'] in tokens_dict and tokens_dict[acc['uid']]:
             all_accounts_with_tokens.append((acc, tokens_dict[acc['uid']]))
     
-    print(f"✅ {len(all_accounts_with_tokens)} টা account এর token ready")
-    
     if not all_accounts_with_tokens:
         return {'success': 0, 'failed': len(fresh_accounts), 'total': len(accounts)}
     
-    print(f"🚀 100 concurrent এ {len(all_accounts_with_tokens)} টা like পাঠাচ্ছি...")
-    start = time.time()
     successful, failed = await send_likes_batch(target_uid, encrypted_uid, all_accounts_with_tokens, url)
-    like_time = time.time() - start
     
     save_data()
     
@@ -384,10 +356,7 @@ async def send_all_likes(target_uid, url, accounts, encrypted_uid):
         'failed': failed,
         'total': len(accounts),
         'already_liked': len(already_liked),
-        'fresh_used': len(all_accounts_with_tokens),
-        'token_gen_time': round(token_gen_time, 2),
-        'like_send_time': round(like_time, 2),
-        'total_time': round(token_gen_time + like_time, 2)
+        'fresh_used': len(all_accounts_with_tokens)
     }
 
 def get_valid_token_sync(uid):
@@ -431,7 +400,7 @@ def get_player_info(encrypted_uid, region, token):
     headers = {
         'User-Agent': "Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)",
         'Authorization': f"Bearer {token}",
-        'Content-Type': "application/x-www-form-urlencoded",
+        'Content-Type": "application/x-www-form-urlencoded",
         'X-GA': "v1 1",
         'ReleaseVersion': "OB55"
     }
@@ -442,32 +411,16 @@ def get_player_info(encrypted_uid, region, token):
     except:
         return None
 
-def get_player_level_from_info(uid):
-    try:
-        url = f"{INFO_API_URL}?uid={uid}"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            if 'basicInfo' in data and 'level' in data['basicInfo']:
-                return data['basicInfo']['level']
-        return None
-    except Exception as e:
-        return None
-
 def process_like_request(uid, region, require_key=True, api_key=None):
-    total_start = time.time()
-    
     if require_key and api_key != API_KEY:
         return jsonify({"error": "Invalid API Key"}), 403
 
     if not uid or not region:
         return jsonify({"error": "UID and region are required"}), 400
 
-    valid_servers = ["IND", "BR", "US", "SAC", "NA", "BD", "RU", "ME", "ID"]
+    valid_servers = ["IND", "BR", "US", "SAC", "NA", "BD", "RU", "ME", "ID", "AG"]
     if region not in valid_servers:
         return jsonify({"error": f"Invalid server. Use: {valid_servers}"}), 400
-
-    player_level = get_player_level_from_info(uid)
 
     accounts = load_accounts(region)
     if not accounts:
@@ -527,29 +480,27 @@ def process_like_request(uid, region, require_key=True, api_key=None):
         player_id = int(after_data['AccountInfo']['UID'])
         player_name = str(after_data['AccountInfo']['PlayerNickname'])
         
-        like_given = after_like - before_like
-        
-        if like_given > 0:
-            status = 1
-        else:
-            status = 2
+        likes_increment = after_like - before_like
+        request_status = 1 if likes_increment > 0 else (2 if likes_increment == 0 else 3)
         
         save_data()
-        
-        total_time = round(time.time() - total_start, 2)
 
+        # Main Like API-er moto synchronized JSON Response format
         response_data = {
-            "success": True,
-            "LikesGivenByAPI": like_given,
-            "LikesafterCommand": after_like,
-            "LikesbeforeCommand": before_like,
-            "PlayerNickname": player_name,
-            "UID": player_id,
-            "status": status,
+            "likes": {
+                "added_by_api": likes_increment,
+                "after": after_like,
+                "before": before_like,
+                "credits": "M. Sarker",
+                "tokens_used": len(accounts)
+            },
+            "player": {
+                "nickname": player_name,
+                "region": region.upper(),
+                "uid": str(player_id)
+            },
+            "status": request_status
         }
-        
-        if player_level is not None:
-            response_data["Level"] = player_level
         
         return jsonify(response_data)
     except Exception as e:
@@ -561,7 +512,7 @@ def process_like_request(uid, region, require_key=True, api_key=None):
 def home():
     return jsonify({
         "status": "online",
-        "service": "Sarker Free Fire Free Like API",
+        "service": "Sarker Fire Free Like API",
         "port": "1001",
         "developer": "M. Sarker",
         "powered_by": "M. Sarker",
@@ -571,7 +522,7 @@ def home():
 @app.route('/like', methods=['GET'])
 def handle_requests():
     uid = request.args.get("uid")
-    region = request.args.get("region", "").upper()
+    region = request.args.get("region", "BD").upper()
     key = request.args.get("key")
     return process_like_request(uid, region, True, key)
 
